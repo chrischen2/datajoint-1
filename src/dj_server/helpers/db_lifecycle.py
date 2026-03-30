@@ -1,5 +1,5 @@
-import wget
 import os
+import urllib.request
 import subprocess
 import datajoint as dj
 
@@ -10,8 +10,9 @@ def create_database(home_dir, db_dir, name):
         return
     # add directory titled name under home
     os.mkdir(db_dir + '/' + name)
-    wget.download('https://raw.githubusercontent.com/datajoint/mysql-docker/master/docker-compose.yaml',
-                 db_dir + '/' + name + '/docker-compose.yaml')
+    urllib.request.urlretrieve(
+        'https://raw.githubusercontent.com/datajoint/mysql-docker/master/docker-compose.yaml',
+        db_dir + '/' + name + '/docker-compose.yaml')
     os.chdir(home_dir)
 
 def start_database(home_dir, db_dir, name):

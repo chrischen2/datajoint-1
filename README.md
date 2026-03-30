@@ -1,35 +1,47 @@
 # datajoint
 
-### Downloading dependencies I
+### Prerequisites
 
-To use this web app, you will need to download (make sure you add all of these to your `$PATH`):
+- Python 3.9+ and a package manager (pip, conda)
+- [Docker Desktop](https://docs.docker.com/desktop/) — runs the MySQL database server
+- [Node.js](https://nodejs.org/en) — for the web frontend (includes `npm`)
 
-- Python package manager: [Poetry](https://python-poetry.org/docs/#installation)
-> Honestly, the best way to download this is to install [Brew](https://brew.sh/) and just run `brew install poetry`. This will automatically add poetry to `PATH` which is an important step.
-- [Python 3.9](https://www.python.org/downloads/release/python-396/) (there is an issue with datajoint-ssl interfacing with versions >=3.10, so use newer versions at your own risk!)
-> Have multiple versions of python? This [page](https://python-poetry.org/docs/managing-environments/) provides tips on how to specify the version you're using. If you installed `python3.9` via another environment, the `path/to/python` may be different (for example, [conda](https://docs.anaconda.com/working-with-conda/ide-tutorials/python-path/) instructions).
-- Database server: [Docker](https://docs.docker.com/desktop/)
-> This runs your datajoint server. Use the desktop app to view and modify running connections (only run one at a time!)
-- Web app utilities: [Nodejs](https://nodejs.org/en)
-> This should also automatically install `npm`. Ensure this is in your `PATH`.
+### Installation
 
-### Downloading dependencies II
+The Python backend is a pip-installable package. Install it into your existing conda (or virtualenv) environment:
 
-Next, for the app to run smoothly, run the following commands (at the repository root):
+```bash
+# From the repository root:
+conda activate myenv        # activate your environment (e.g. retinanalysis)
+pip install -e .            # install dj-server in editable mode
+```
 
-- `mkdir databases`: this is where databases will be stored
-- `poetry install`: gets all python dependencies
-> make sure you aren't already in a virtual environment, this is all designed to run outside a python shell. If you use conda, `conda config --set auto_activate_base false` prevents activation by default.
-- `cd next-app`: this is where the app itself runs.
-- `npm install`: gets all javascript dependencies. most warnings here can be ignored.
+Then install the frontend dependencies:
+
+```bash
+cd next-app
+npm install
+```
 
 ### Launching the app
 
-To run the app, launch Docker Desktop, mount any necessary external storage, ensure you are in `/next-app`, and run:
+Launch Docker Desktop, mount any necessary external storage, then from `next-app/`:
 
-``` npm run dev ```
+```bash
+npm run dev
+```
 
-You should be able to view the app at http://localhost:3000/. The terminal window will then track actions: this is useful to view the status of datajoint commands, and for debugging.
+This starts both the Flask backend (port 5000) and the Next.js frontend (port 3000).
+
+You can also run the Flask server standalone:
+
+```bash
+dj-server                              # console script (installed by pip)
+flask --app dj_server.app run          # standard Flask CLI
+python -m dj_server.app                # direct execution
+```
+
+Visit http://localhost:3000/ to use the web app. The terminal tracks datajoint commands and is useful for debugging.
 
 ## 1. Setting up the database
 

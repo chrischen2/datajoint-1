@@ -2,7 +2,7 @@ import datajoint as dj
 import json
 import os
 import datetime
-import helpers.utils as utils
+from dj_server.helpers import utils
 from tqdm import tqdm
 
 Experiment: dj.Manual = None

@@ -3,15 +3,15 @@ import json
 import os
 import numpy as np
 import datetime
-import helpers.utils
+from dj_server.helpers import utils
 import base64
 from io import BytesIO
 from tqdm import tqdm
 import h5py
 from matplotlib.figure import Figure
 
-NAS_DATA_DIR = helpers.utils.NAS_DATA_DIR
-NAS_ANALYSIS_DIR = helpers.utils.NAS_ANALYSIS_DIR
+NAS_DATA_DIR = utils.NAS_DATA_DIR
+NAS_ANALYSIS_DIR = utils.NAS_ANALYSIS_DIR
 
 Experiment: dj.Manual = None
 Animal: dj.Manual = None
@@ -26,7 +26,7 @@ Protocol: dj.Manual = None
 Tags: dj.Manual = None
 
 db: dj.VirtualModule = None
-table_arr: list = helpers.utils.table_arr
+table_arr: list = utils.table_arr
 table_dict: dict = None
 user: str = None
 query: dj.expression.QueryExpression = None
@@ -49,7 +49,7 @@ def fill_tables(username: str, db_param: dj.VirtualModule):
     Stimulus = db.Stimulus
     Protocol = db.Protocol
     Tags = db.Tags
-    table_dict = helpers.utils.table_dict(Experiment, Animal, Preparation, Cell, EpochGroup, 
+    table_dict = utils.table_dict(Experiment, Animal, Preparation, Cell, EpochGroup, 
                                   EpochBlock, Epoch, Response, Stimulus, Tags)
 
 # get table names ordered by hierarchy
@@ -142,7 +142,7 @@ def process_query(query_obj: dict) -> dj.expression.QueryExpression:
                 if query_obj[table]:
                     query = query & apply_conditions(query_obj[table], table)
         # merge down
-        query = query.proj(**{f'{table}_id':'id'}) * table_dict[helpers.utils.child_table(table)].proj(**{f'{table}_id':'parent_id'})
+        query = query.proj(**{f'{table}_id':'id'}) * table_dict[utils.child_table(table)].proj(**{f'{table}_id':'parent_id'})
     return query.proj(response_id='id')
 
 # entry method, initializes the database values and then parses query object

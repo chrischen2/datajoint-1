@@ -1,22 +1,25 @@
-[tool.poetry]
-name = "flask-server"
-version = "0.1.0"
-description = ""
-authors = ["Samarjit Kaushik <samarjit@uw.edu>"]
-readme = "README.md"
-package-mode = false
-
-[tool.poetry.dependencies]
-python = ">=3.9,<3.10"
-datajoint = "^0.14.1"
-wget = "^3.2"
-h5py = "^3.11.0"
-tqdm = "^4.66.4"
-flask = "^3.0.3"
-flask-cors = "^4.0.1"
-setuptools = "^71.1.0"
-matplotlib = "^3.9.2"
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dj-server"
+version = "0.1.0"
+description = "DataJoint Flask server for neuroscience experiment management"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "Samarjit Kaushik", email = "samarjit@uw.edu" },
+]
+dependencies = [
+  "datajoint>=0.14.1",
+  "flask>=3.0.3",
+  "flask-cors>=4.0.1",
+  "h5py>=3.11.0",
+  "tqdm>=4.66.4",
+  "matplotlib>=3.9.2",
+  "numpy",
+]
+
+[project.scripts]
+dj-server = "dj_server.app:run_server"

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "flask-dev": "poetry run flask --app api/app run",
+    "flask-dev": "flask --app dj_server.app run",
     "next-dev": "next dev",
     "dev": "concurrently \"npm run flask-dev\" \"npm run next-dev\"",
     "build": "next build",

@@ -6,27 +6,28 @@ import datajoint as dj
 import pymysql
 import time
 import json
+import importlib.resources
 
 # fix for wget
 # import ssl
 # ssl._create_default_https_context = ssl._create_unverified_context
 
 # import custom functions
-from helpers.init import create_database, delete_database, start_database, stop_database
-from helpers.pop import append_data
-from helpers.query import saved_queries, add_query, delete_query
-from helpers.query import query_levels, table_fields, create_query, generate_tree
-from helpers.query import get_metadata_helper
-from helpers.query import get_options, get_trace_binary, get_spikehist_binary
-from helpers.query import add_tags, delete_tags
-from helpers.query import push_tags, pull_tags, reset_tags
+from dj_server.helpers.db_lifecycle import create_database, delete_database, start_database, stop_database
+from dj_server.helpers.pop import append_data
+from dj_server.helpers.query import saved_queries, add_query, delete_query
+from dj_server.helpers.query import query_levels, table_fields, create_query, generate_tree
+from dj_server.helpers.query import get_metadata_helper
+from dj_server.helpers.query import get_options, get_trace_binary, get_spikehist_binary
+from dj_server.helpers.query import add_tags, delete_tags
+from dj_server.helpers.query import push_tags, pull_tags, reset_tags
 
 app = Flask(__name__)
 CORS(app)
 
 # immutable globals
 home_dir: str = os.getcwd()
-schema_path: str = './api/schema.py'
+schema_path: str = str(importlib.resources.files('dj_server').joinpath('schema.py'))
 db_dir: str = os.path.abspath("../databases")#"/Users/samarjit/workspace/neuro/samarjit_dj_tool/datajoint/databases"#
 download_dir: str = os.path.abspath("../downloads") # similar to above
 
@@ -511,3 +512,12 @@ def import_reset_tags():
             return jsonify({"message": f"Error resetting tags: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
+
+
+def run_server(host="127.0.0.1", port=5000, debug=False):
+    """Entry point for the dj-server console script."""
+    app.run(host=host, port=port, debug=debug)
+
+
+if __name__ == "__main__":
+    run_server(debug=True)

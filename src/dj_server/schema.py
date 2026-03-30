@@ -1,5 +1,5 @@
 import datajoint as dj
-import helpers.utils as utils
+from dj_server.helpers import utils
 
 dj.config['database.host'] = '127.0.0.1'
 dj.config['database.user'] = 'root'
