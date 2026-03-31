@@ -88,11 +88,27 @@ def list_dbs():
     # Also detect running datajoint/mysql Docker containers
     try:
         result = subprocess.run(
-            ['docker', 'ps', '--filter', 'ancestor=datajoint/mysql', '--format', '{{.Names}}'],
+            ['docker', 'ps', '--filter', 'ancestor=datajoint/mysql:8.0', '--format', '{{.Names}}'],
             capture_output=True, text=True, timeout=5)
         for name in result.stdout.strip().splitlines():
             if name and name not in dbs:
                 dbs.append(name)
+        # Fallback: also check without tag
+        if not result.stdout.strip():
+            result = subprocess.run(
+                ['docker', 'ps', '--filter', 'ancestor=datajoint/mysql', '--format', '{{.Names}}'],
+                capture_output=True, text=True, timeout=5)
+            for name in result.stdout.strip().splitlines():
+                if name and name not in dbs:
+                    dbs.append(name)
+        # Fallback: check by port 3306
+        if not dbs:
+            result = subprocess.run(
+                ['docker', 'ps', '--filter', 'publish=3306', '--format', '{{.Names}}'],
+                capture_output=True, text=True, timeout=5)
+            for name in result.stdout.strip().splitlines():
+                if name and name not in dbs:
+                    dbs.append(name)
     except Exception:
         pass  # Docker not available or not running
     return jsonify({"databases": dbs}), 200
