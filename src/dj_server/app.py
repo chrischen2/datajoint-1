@@ -1,38 +1,37 @@
 import os
 from threading import Thread
-from flask import Flask, session, request, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import datajoint as dj
 import pymysql
 import subprocess
 import time
 import json
-import importlib.resources
 
-# fix for wget
-# import ssl
-# ssl._create_default_https_context = ssl._create_unverified_context
+# import from retinanalysis (shared backend)
+from retinanalysis.utils.database_pop import append_data
 
-# import custom functions
+# import GUI-specific helpers
 from dj_server.helpers.db_lifecycle import create_database, delete_database, start_database, stop_database
-from dj_server.helpers.pop import append_data
 from dj_server.helpers.query import saved_queries, add_query, delete_query
 from dj_server.helpers.query import query_levels, table_fields, create_query, generate_tree
 from dj_server.helpers.query import get_metadata_helper
 from dj_server.helpers.query import get_options, get_trace_binary, get_spikehist_binary
 from dj_server.helpers.query import add_tags, delete_tags
 from dj_server.helpers.query import push_tags, pull_tags, reset_tags
+from dj_server.helpers.query import (
+    get_experiment_list, get_experiment_tree, get_on_demand_data, fill_tables
+)
 
 app = Flask(__name__)
 CORS(app)
 
 # immutable globals
 home_dir: str = os.getcwd()
-schema_path: str = str(importlib.resources.files('dj_server').joinpath('schema.py'))
-db_dir: str = os.path.abspath("../databases")#"/Users/samarjit/workspace/neuro/samarjit_dj_tool/datajoint/databases"#
-download_dir: str = os.path.abspath("../downloads") # similar to above
+db_dir: str = os.path.abspath("../databases")
+download_dir: str = os.path.abspath("../downloads")
 
-# mutable globals (should be saved to a session)
+# mutable globals
 mea_dir: str = None
 db: dj.VirtualModule = None
 username: str = "guest"
@@ -53,7 +52,6 @@ print("Globals populated", flush=True)
 
 ### 1.1: Set database storage directory, initialize and connect to database
 
-# dir: str -> None
 @app.route('/init/set-database-directory', methods=['POST'])
 def set_db_dir():
     global db_dir
@@ -63,7 +61,6 @@ def set_db_dir():
     else:
         return jsonify({"message": "Invalid directory path!"}), 400
 
-# dir: str -> None
 @app.route('/init/set-mea-directory', methods=['POST'])
 def set_mea_dir():
     global mea_dir
@@ -73,47 +70,30 @@ def set_mea_dir():
     else:
         return jsonify({"message": "Invalid directory path!"}), 400
 
-# None -> dir: str
 @app.route('/init/get-database-directory', methods=['GET'])
 def get_db_dir():
     return jsonify({"dir": f"{db_dir}"})
 
-# None -> databases: list
 @app.route('/init/list-databases', methods=['GET'])
 def list_dbs():
     dbs = []
-    # Check for databases managed in db_dir
     if db_dir and os.path.isdir(db_dir):
         dbs = [f for f in os.listdir(db_dir) if os.path.isdir(os.path.join(db_dir, f))]
-    # Also detect running datajoint/mysql Docker containers
+    # Detect running datajoint/mysql Docker containers
     try:
-        result = subprocess.run(
-            ['docker', 'ps', '--filter', 'ancestor=datajoint/mysql:8.0', '--format', '{{.Names}}'],
-            capture_output=True, text=True, timeout=5)
-        for name in result.stdout.strip().splitlines():
-            if name and name not in dbs:
-                dbs.append(name)
-        # Fallback: also check without tag
-        if not result.stdout.strip():
+        for filt in ['ancestor=datajoint/mysql:8.0', 'ancestor=datajoint/mysql', 'publish=3306']:
             result = subprocess.run(
-                ['docker', 'ps', '--filter', 'ancestor=datajoint/mysql', '--format', '{{.Names}}'],
+                ['docker', 'ps', '--filter', filt, '--format', '{{.Names}}'],
                 capture_output=True, text=True, timeout=5)
             for name in result.stdout.strip().splitlines():
                 if name and name not in dbs:
                     dbs.append(name)
-        # Fallback: check by port 3306
-        if not dbs:
-            result = subprocess.run(
-                ['docker', 'ps', '--filter', 'publish=3306', '--format', '{{.Names}}'],
-                capture_output=True, text=True, timeout=5)
-            for name in result.stdout.strip().splitlines():
-                if name and name not in dbs:
-                    dbs.append(name)
+            if dbs:
+                break
     except Exception:
-        pass  # Docker not available or not running
+        pass
     return jsonify({"databases": dbs}), 200
 
-# name: str -> None
 @app.route('/init/create-database', methods=['POST'])
 def create_db():
     db_name = request.json.get('name')
@@ -125,8 +105,7 @@ def create_db():
             return jsonify({"message": f"Error creating database: {e}"}), 400
     else:
         return jsonify({"message": "Invalid database name!"}), 400
-    
-# name: str -> None
+
 @app.route('/init/delete-database', methods=['POST'])
 def delete_db():
     db_name = request.json.get('name')
@@ -140,7 +119,6 @@ def delete_db():
     else:
         return jsonify({"message": "Invalid database name!"}), 400
 
-# name: str -> None
 @app.route('/init/start-database', methods=['POST'])
 def start_db():
     db_name = request.json.get('name')
@@ -153,7 +131,6 @@ def start_db():
     else:
         return jsonify({"message": "Invalid database name!"}), 400
 
-# name: str -> None
 @app.route('/init/stop-database', methods=['POST'])
 def stop_db():
     global db
@@ -166,14 +143,13 @@ def stop_db():
         except Exception as e:
             return jsonify({"message": f"Error stopping database: {e}"}), 400
     else:
-        return jsonify({"message": "Invalid database name!"}),
+        return jsonify({"message": "Invalid database name!"}), 400
 
-# name: str -> None
 @app.route('/init/connect-database', methods=['POST'])
 def connect_db():
     global db
     db_name = request.json.get('name')
-    if db_name and db_dir:
+    if db_name:
         try:
             for attempt in range(4):
                 try:
@@ -187,7 +163,7 @@ def connect_db():
             print('Connected' if dj.conn().is_connected else 'Failed to connect', flush=True)
             if 'schema' not in dj.list_schemas():
                 print('Initializing schema')
-                exec(open(schema_path).read())
+                import retinanalysis.config.schema  # ensures schema tables are created
             db = dj.VirtualModule('schema.py', 'schema')
             return jsonify({"message": "Connected to database successfully!"}), 200
         except Exception as e:
@@ -196,7 +172,6 @@ def connect_db():
     else:
         return jsonify({"message": "Invalid database name!"}), 400
 
-# None -> connected: bool
 @app.route('/init/is-connected', methods=['GET'])
 def is_connected():
     if db:
@@ -204,9 +179,8 @@ def is_connected():
     else:
         return jsonify({"connected": False}), 200
 
-# 1.2: Setting user, should be a connection 'db' at this point. 
+### 1.2: User
 
-# user: str -> None
 @app.route('/user/set-user', methods=['POST'])
 def set_user():
     global username
@@ -217,7 +191,6 @@ def set_user():
         username = None
         return jsonify({"message": "Invalid user name!"}), 400
 
-# None -> user: str
 @app.route('/user/get-user', methods=['GET'])
 def get_user():
     if username:
@@ -225,9 +198,8 @@ def get_user():
     else:
         return jsonify({"user": "user_not_set"}), 200
 
-# 1.3: once the user is set, we can start adding data.
+### 1.3: Population (uses retinanalysis.utils.database_pop.append_data)
 
-# None -> empty: bool, num_experiments: int
 @app.route('/pop/is-empty', methods=['GET'])
 def is_empty():
     if db:
@@ -240,8 +212,7 @@ def is_empty():
         return jsonify({"message": "No database connection!"}), 400
 
 def add_data_thread(data_dir, meta_dir, tags_dir, username, db):
-    global add_data_started
-    global add_data_error
+    global add_data_started, add_data_error
     add_data_started = True
     try:
         append_data(data_dir, meta_dir, tags_dir, username, db)
@@ -250,7 +221,6 @@ def add_data_thread(data_dir, meta_dir, tags_dir, username, db):
         add_data_started = False
     add_data_started = False
 
-# data_dir: str, meta_dir: str, tags_dir: str -> None
 @app.route('/pop/add-data', methods=['POST'])
 def add_data():
     if db and username:
@@ -267,14 +237,12 @@ def add_data():
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# None -> adding: bool
 @app.route('/pop/is-adding', methods=['GET'])
 def is_adding():
     if add_data_error:
         return jsonify({"message": add_data_error}), 400
     return jsonify({"adding": add_data_started}), 200
 
-# None -> None
 @app.route('/pop/clear', methods=['POST'])
 def clear():
     if db and username:
@@ -287,8 +255,38 @@ def clear():
             return jsonify({"message": "Error while clearing."}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
-    
-### 2.1: Querying: First we need methods to help create the query.
+
+### 2.0: Browse endpoints (new — metadata-only, fast)
+
+@app.route('/browse/experiments', methods=['GET'])
+def browse_experiments():
+    """Return lightweight experiment list filtered by mode (patch/mea/all)."""
+    if not db:
+        return jsonify({"message": "No database connection!"}), 400
+    mode = request.args.get('mode', 'all')
+    fill_tables(username, db)
+    experiments = get_experiment_list(mode, db)
+    return jsonify({"experiments": experiments}), 200
+
+@app.route('/browse/tree/<int:experiment_id>', methods=['GET'])
+def browse_tree(experiment_id):
+    """Return hierarchical metadata tree for one experiment (no .h5 access)."""
+    if not db:
+        return jsonify({"message": "No database connection!"}), 400
+    fill_tables(username, db)
+    tree = get_experiment_tree(experiment_id, db)
+    return jsonify({"tree": tree}), 200
+
+@app.route('/browse/load-data/<string:level>/<int:item_id>', methods=['GET'])
+def browse_load_data(level, item_id):
+    """On-demand: fetch response/stimulus data from .h5 file for a specific item."""
+    if not db:
+        return jsonify({"message": "No database connection!"}), 400
+    fill_tables(username, db)
+    data = get_on_demand_data(level, item_id, db)
+    return jsonify({"data": data}), 200
+
+### 2.1: Query (existing — complex query builder)
 
 @app.route('/query/get-query-levels', methods=['GET'])
 def get_query_levels():
@@ -297,7 +295,6 @@ def get_query_levels():
     else:
         return jsonify({"message": "No database connection!"}), 400
 
-# table: str -> fields: list
 @app.route('/query/get-table-fields', methods=['POST'])
 def get_table_fields():
     if db and username:
@@ -305,8 +302,6 @@ def get_table_fields():
     else:
         return jsonify({"message": "No database connection!"}), 400
 
-# All in one method (to replace the above two)
-# None -> levels: list, fields: dict, tag_fields: list
 @app.route('/query/get-levels-and-fields', methods=['GET'])
 def get_levels_and_fields():
     if db and username:
@@ -316,18 +311,14 @@ def get_levels_and_fields():
         return jsonify({"levels": levels, "fields": fields, "tag_fields": tag_fields}), 200
     else:
         return jsonify({"message": "No database connection!"}), 400
-    
-# methods to inject saved queries
 
-# None -> queries: dict
 @app.route('/query/get-saved-queries', methods=['GET'])
 def get_saved_queries():
     if db and username:
         return jsonify({"queries": saved_queries(download_dir)}), 200
     else:
         return jsonify({"message": "No database connection!"}), 400
-    
-# query_name: str, query_obj: dict -> None
+
 @app.route('/query/add-saved-query', methods=['POST'])
 def add_saved_query():
     if db and username:
@@ -338,8 +329,7 @@ def add_saved_query():
             return jsonify({"message": f"Error saving query: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
-    
-# query_name: str -> None
+
 @app.route('/query/delete-saved-query', methods=['POST'])
 def delete_saved_query():
     if db and username:
@@ -351,15 +341,10 @@ def delete_saved_query():
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# 2.2: Now we can actually execute the query!    
-
-# query_obj: dict, exclude_levels: list -> results: list
 @app.route('/query/execute-query', methods=['POST'])
 def execute_query():
     if db and username:
-        global query
-        global exclude_levels
-        # try:
+        global query, exclude_levels
         print("Querying", flush=True)
         query = create_query(request.json.get('query_obj'), username, db)
         print("Constructed query", flush=True)
@@ -371,27 +356,23 @@ def execute_query():
                 return jsonify({"results": tree}), 200
             else:
                 return jsonify({"message": f"{len(query)} results found!"}), 200
-        # except Exception as e:
-        #     return jsonify({"message": f"Error executing query: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
-    
-# 3: Results methods: you can add your own visualizations here as well
+
+### 3: Results
 
 def download_thread(query, bool_exclude_levels, bool_include_meta, filename):
     try:
-        tree = generate_tree(query, 
-                                 exclude_levels if bool_exclude_levels else [],
-                                 bool_include_meta)
+        tree = generate_tree(query,
+                             exclude_levels if bool_exclude_levels else [],
+                             bool_include_meta)
         print("Generated. Downloading to ", filename, flush=True)
         with open(filename, 'w') as f:
-            # we must handle datetime objects
             f.write(json.dumps(tree, default=str))
         print("Downloaded", flush=True)
     except Exception as e:
         print(f"Error downloading results: {e}", flush=True)
 
-# include_meta: bool, exclude_levels: bool -> None
 @app.route('/results/download-results', methods=['POST'])
 def download_results():
     if query:
@@ -400,9 +381,9 @@ def download_results():
                 os.mkdir(download_dir)
             filename = f"results_{time.strftime('%Y%m%d_%H%M%S')}.json"
             Thread(target=download_thread,
-                   args=(query, request.json.get('exclude_levels'), 
+                   args=(query, request.json.get('exclude_levels'),
                          request.json.get('include_meta'), f"{download_dir}/{filename}")).start()
-            return jsonify({"message": 
+            return jsonify({"message":
                             f"Downloading to {filename}...\nThis can take a while, check progress in terminal"}), 200
         except Exception as e:
             return jsonify({"message": f"Error starting download: {e}"}), 400
@@ -413,7 +394,7 @@ def download_results():
 def get_metadata():
     if db and username:
         try:
-            metadata: dict = get_metadata_helper(request.json.get('level'), request.json.get('id'))
+            metadata = get_metadata_helper(request.json.get('level'), request.json.get('id'))
             if metadata is None:
                 return jsonify({"message": "Metadata not found!"}), 400
             return jsonify({"metadata": metadata}), 200
@@ -422,13 +403,11 @@ def get_metadata():
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# id: int, experiment_id: int, level: str
-# -> data: dict[<optgroup>: list[label: str, <...data>], ...]
 @app.route('/results/get-visualization-data', methods=['POST'])
 def get_visualization_data():
     if db and username:
         try:
-            data: dict = get_options(request.json.get('level'), request.json.get('id'), request.json.get('experiment_id'))
+            data = get_options(request.json.get('level'), request.json.get('id'), request.json.get('experiment_id'))
             if data is None:
                 return jsonify({"message": "No visualizations available yet!"}), 200
             return jsonify({"options": data}), 200
@@ -437,16 +416,15 @@ def get_visualization_data():
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# h5_file: str, h5_path: str -> image: bytes
 @app.route('/results/get-visualization', methods=['POST'])
 def get_visualization():
     if db and username:
         try:
             data = request.json.get('data')
             if data['vis_type'] == 'epoch-singlecell':
-                image: bytes = get_trace_binary(data['h5_file'], data['h5_path'])
+                image = get_trace_binary(data['h5_file'], data['h5_path'])
             elif data['vis_type'] == 'epoch_block-mea':
-                image: bytes = get_spikehist_binary(data['data_path'])
+                image = get_spikehist_binary(data['data_path'])
             else:
                 return jsonify({"message": "Visualization type not supported!"}), 400
             if image is None:
@@ -457,52 +435,30 @@ def get_visualization():
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# epoch_id: int, experiment_id: int, level: str -> image: bytes
-# @app.route('/results/get-visualization', methods=['POST'])
-# def get_visualization():
-#     if db and username:
-#         if request.json.get('level') == 'epoch':
-#             try:
-#                 image: bytes = get_image_binary(request.json.get('id'), request.json.get('experiment_id'))
-#                 if image is None:
-#                     return jsonify({"message": "No visualizations available for this epoch!"}), 200
-#                 return jsonify({"image": image}), 200
-#             except Exception as e:
-#                 return jsonify({"message": f"Error fetching visualization: {e}"}), 400
-#         else:
-#             return jsonify({"message": "No visualizations available yet!"}), 200
-#     else:
-#         return jsonify({"message": "Connect and sign in first!"}), 400
+### Tags
 
-# ids: list ["experiment_id-level-id"], tag: str -> None
 @app.route('/results/add-tags', methods=['POST'])
 def bulk_add_tags():
     if db and username:
         try:
-            ids = request.json.get('ids')
-            tag = request.json.get('tag')
-            add_tags(ids, tag)
+            add_tags(request.json.get('ids'), request.json.get('tag'))
             return jsonify({"message": "Tag added successfully!"}), 200
         except Exception as e:
             return jsonify({"message": f"Error adding tag: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# ids: list ["experiment_id-level-id"], tag: str -> None
 @app.route('/results/delete-tags', methods=['POST'])
 def bulk_delete_tags():
     if db and username:
         try:
-            ids = request.json.get('ids')
-            tag = request.json.get('tag')
-            delete_tags(ids, tag)
+            delete_tags(request.json.get('ids'), request.json.get('tag'))
             return jsonify({"message": "Tag deleted successfully!"}), 200
         except Exception as e:
             return jsonify({"message": f"Error deleting tag: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
 
-# experiment_ids: list -> None
 @app.route('/results/push-tags', methods=['POST'])
 def export_push_tags():
     if db and username:
@@ -513,8 +469,7 @@ def export_push_tags():
             return jsonify({"message": f"Error exporting tags: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
-    
-# experiment_ids: list -> None
+
 @app.route('/results/pull-tags', methods=['POST'])
 def import_pull_tags():
     if db and username:
@@ -525,8 +480,7 @@ def import_pull_tags():
             return jsonify({"message": f"Error importing tags: {e}"}), 400
     else:
         return jsonify({"message": "Connect and sign in first!"}), 400
-    
-# experiment_ids: list -> None
+
 @app.route('/results/reset-tags', methods=['POST'])
 def import_reset_tags():
     if db and username:
