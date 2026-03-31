@@ -81,6 +81,7 @@ def get_db_dir():
 @app.route('/init/list-databases', methods=['GET'])
 def list_dbs():
     if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
         dbs = [f for f in os.listdir(db_dir) if os.path.isdir(os.path.join(db_dir, f))]
         return jsonify({"databases": dbs}), 200
     else:
