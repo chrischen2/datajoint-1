@@ -104,7 +104,12 @@ def delete_query(query_name: str, download_dir: str):
 # given cond = {type, value}
 def process_condition(table_name: str, cond: dict):
     if cond['type'] == 'TAG':
-        return (Tags & f'table_name="{table_name}"' & cond['value']).proj(id='table_id')
+        # Fetch matching IDs and return as string restriction to avoid
+        # DataJoint 2.x lineage conflicts from .proj() renaming
+        tag_ids = (Tags & f'table_name="{table_name}"' & cond['value']).fetch('table_id')
+        if len(tag_ids) == 0:
+            return 'FALSE'
+        return f'id in ({",".join(str(i) for i in tag_ids)})'
     else:
         return cond['value']
 
