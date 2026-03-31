@@ -16,9 +16,10 @@ dependencies = [
   "flask>=3.0.3",
   "flask-cors>=4.0.1",
   "h5py>=3.11.0",
-  "tqdm>=4.66.4",
   "matplotlib>=3.9.2",
   "numpy",
+  "pymysql",
+  "tqdm>=4.66.4",
 ]
 
 [project.scripts]
