@@ -4,28 +4,27 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Box, List, ListItemButton, ListItemText, Typography,
-  CircularProgress, Chip, TextField, InputAdornment
+  CircularProgress, TextField, InputAdornment
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExperimentTree from './ExperimentTree';
 
-export default function ExperimentBrowser({ mode }) {
+export default function ExperimentBrowser() {
   const [experiments, setExperiments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedExp, setSelectedExp] = useState(null);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (!mode) return;
     setLoading(true);
     setSelectedExp(null);
-    axios.get(`http://localhost:3000/api/browse/experiments?mode=${mode}`)
+    axios.get('http://localhost:3000/api/browse/experiments')
       .then(res => {
         setExperiments(res.data.experiments || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [mode]);
+  }, []);
 
   const filtered = experiments.filter(exp =>
     exp.exp_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -47,7 +46,6 @@ export default function ExperimentBrowser({ mode }) {
           />
           <Typography variant="caption" sx={{ mt: 0.5, display: 'block' }}>
             {filtered.length} experiment{filtered.length !== 1 ? 's' : ''}
-            {mode !== 'all' ? ` (${mode})` : ''}
           </Typography>
         </Box>
         {loading ? (
@@ -68,13 +66,6 @@ export default function ExperimentBrowser({ mode }) {
                       {exp.start_time && exp.start_time !== 'None' && <span>{exp.start_time.split(' ')[0]}</span>}
                     </span>
                   }
-                />
-                <Chip
-                  label={exp.is_mea ? 'MEA' : 'Patch'}
-                  size="small"
-                  color={exp.is_mea ? 'info' : 'success'}
-                  variant="outlined"
-                  sx={{ ml: 1 }}
                 />
               </ListItemButton>
             ))}

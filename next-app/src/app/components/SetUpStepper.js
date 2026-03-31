@@ -18,13 +18,12 @@ import Tab from '@mui/material/Tab';
 
 import SelectDatabase from './setup/SelectDatabase';
 import SetUser from './setup/SetUser';
-import ModeSelector from './setup/ModeSelector';
 import QueryContainer from './setup/QueryContainer';
 import ExperimentBrowser from './browse/ExperimentBrowser';
 
 const steps = [
   { label: 'Connect to database', description: 'Select a running database and connect.' },
-  { label: 'Choose mode & user', description: 'Select Patch or MEA and set your username.' },
+  { label: 'Set user', description: 'Set your username.' },
   { label: 'Browse & Query', description: '' },
 ];
 
@@ -32,7 +31,6 @@ export default function SetUpStepper({ onResultsChange }) {
   const [activeStep, setActiveStep] = React.useState(0);
   const [isConnected, setIsConnected] = React.useState(false);
   const [user, setUser] = React.useState(false);
-  const [mode, setMode] = React.useState('all');
   const [queryObj, setQueryObj] = React.useState(null);
   const [excludeLevels, setExcludeLevels] = React.useState([]);
   const [response, setResponse] = React.useState(null);
@@ -87,10 +85,7 @@ export default function SetUpStepper({ onResultsChange }) {
 
               {/* Step 1: Mode + User */}
               {index === 1 && (
-                <>
-                  <ModeSelector mode={mode} onModeChange={setMode} />
-                  <SetUser onUserSet={setUser} />
-                </>
+                <SetUser onUserSet={setUser} />
               )}
 
               {/* Step 2: Browse & Query */}
@@ -102,7 +97,7 @@ export default function SetUpStepper({ onResultsChange }) {
                   </Tabs>
                   {browseTab === 0 && (
                     <Box sx={{ height: 'calc(100vh - 350px)', mt: 1 }}>
-                      <ExperimentBrowser mode={mode} />
+                      <ExperimentBrowser />
                     </Box>
                   )}
                   {browseTab === 1 && (

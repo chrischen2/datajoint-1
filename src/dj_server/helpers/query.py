@@ -57,22 +57,15 @@ def fill_tables(username: str, db_param: dj.VirtualModule):
 # Browse functions (new — metadata-only, fast)
 # ============================================================
 
-def get_experiment_list(mode: str, db_param: dj.VirtualModule) -> list:
-    """Return lightweight experiment metadata filtered by mode (patch/mea/all)."""
-    if mode == 'mea':
-        experiments = (db_param.Experiment & 'is_mea=1').fetch(as_dict=True)
-    elif mode == 'patch':
-        experiments = (db_param.Experiment & 'is_mea=0').fetch(as_dict=True)
-    else:
-        experiments = db_param.Experiment.fetch(as_dict=True)
-    # Return lightweight metadata — strip large JSON blobs
+def get_experiment_list(db_param: dj.VirtualModule) -> list:
+    """Return lightweight experiment metadata (patch / single-cell only)."""
+    experiments = (db_param.Experiment & 'is_mea=0').fetch(as_dict=True)
     result = []
     for exp in experiments:
         result.append({
             'id': exp['id'],
             'exp_name': exp['exp_name'],
             'label': exp.get('label', ''),
-            'is_mea': exp['is_mea'],
             'date_added': str(exp.get('date_added', '')),
             'start_time': str(exp.get('start_time', '')),
             'experimenter': exp.get('experimenter', ''),
@@ -91,7 +84,6 @@ def get_experiment_tree(experiment_id: int, db_param: dj.VirtualModule) -> dict:
     tree = {
         'id': exp['id'], 'level': 'experiment',
         'label': exp['label'], 'exp_name': exp['exp_name'],
-        'is_mea': exp['is_mea'],
         'experimenter': exp.get('experimenter', ''),
         'start_time': str(exp.get('start_time', '')),
     }
@@ -301,9 +293,7 @@ def generate_tree(query: dj.expression.QueryExpression,
                     ).fetch(as_dict=True))[0]
             child['level'] = table_arr[cur_level]
             child['id'] = obj['id']
-            if child['level'] == 'experiment':
-                child['is_mea'] = obj['is_mea']
-            else:
+            if child['level'] != 'experiment':
                 child['experiment_id'] = obj['experiment_id']
             if 'label' in obj.keys():
                 child['label'] = obj['label']
@@ -343,9 +333,7 @@ def generate_object_tree(query: dj.expression.QueryExpression,
                     ).fetch(as_dict=True))[0]
             child['level'] = table_arr[cur_level]
             child['id'] = obj['id']
-            if child['level'] == 'experiment':
-                child['is_mea'] = obj['is_mea']
-            else:
+            if child['level'] != 'experiment':
                 child['experiment_id'] = obj['experiment_id']
             if 'label' in obj.keys():
                 child['label'] = obj['label']
@@ -371,9 +359,7 @@ def get_metadata_helper(level: str, id: int) -> dict:
 
 def get_options(level: str, id: int, experiment_id: int) -> dict:
     if level == 'epoch':
-        h5_file, is_mea = (Experiment & f'id={experiment_id}').fetch1('data_file', 'is_mea')
-        if is_mea:
-            return None
+        h5_file = (Experiment & f'id={experiment_id}').fetch1('data_file')
         responses = []
         for item in (Response & f'parent_id={id}').fetch(as_dict=True):
             responses.append({'label': item['device_name'],
@@ -387,18 +373,6 @@ def get_options(level: str, id: int, experiment_id: int) -> dict:
                             'h5_file': h5_file,
                             'vis_type': 'epoch-singlecell'})
         return {'responses': responses, 'stimuli': stimuli}
-    elif level == 'epoch_block':
-        is_mea = (Experiment & f'id={experiment_id}').fetch1('is_mea')
-        if not is_mea:
-            return None
-        data_dir = (EpochBlock & f"id={id}").fetch1('data_dir')
-        full_path = os.path.join(NAS_DATA_DIR, data_dir)
-        algorithms = []
-        for algo in os.listdir(full_path):
-            algorithms.append({'label': algo,
-                               'data_path': os.path.join(full_path, algo),
-                               'vis_type': 'epoch_block-mea'})
-        return {'algorithms': algorithms}
     return None
 
 def get_data_generic(table_name: str, id: int):
@@ -426,27 +400,6 @@ def get_trace_binary(h5_file: str, h5_path: str) -> bytes:
         buf = BytesIO()
         fig.savefig(buf, format='png')
         data = base64.b64encode(buf.getbuffer()).decode("ascii")
-    return data
-
-def get_spikehist_binary(base_path: str) -> bytes:
-    clusters = np.load(os.path.join(base_path, 'spike_clusters.npy')).flatten()
-    times = np.load(os.path.join(base_path, 'spike_times.npy')).flatten()
-    sample_rate = 20_000
-    cluster_counts = np.divide(np.bincount(clusters),
-                                ((np.max(times) - np.min(times)) / sample_rate))
-    bins = np.logspace(0, np.log10(cluster_counts.max()), 30)
-    hist, bin_edges = np.histogram(cluster_counts, bins=bins)
-    fig = Figure()
-    ax = fig.subplots()
-    ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), edgecolor='black')
-    ax.set_xscale('log')
-    ticks = [(10 ** i) for i in range(int(np.log10(cluster_counts.max())) + 2)]
-    ax.set_xticks(ticks, [str(i) for i in ticks])
-    ax.set_xlabel('Avg. spikes per second in cluster')
-    ax.set_ylabel('Number of clusters')
-    buf = BytesIO()
-    fig.savefig(buf, format='png')
-    data = base64.b64encode(buf.getbuffer()).decode("ascii")
     return data
 
 # Tag operations

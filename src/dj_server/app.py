@@ -16,7 +16,7 @@ from dj_server.helpers.db_lifecycle import create_database, delete_database, sta
 from dj_server.helpers.query import saved_queries, add_query, delete_query
 from dj_server.helpers.query import query_levels, table_fields, create_query, generate_tree
 from dj_server.helpers.query import get_metadata_helper
-from dj_server.helpers.query import get_options, get_trace_binary, get_spikehist_binary
+from dj_server.helpers.query import get_options, get_trace_binary
 from dj_server.helpers.query import add_tags, delete_tags
 from dj_server.helpers.query import push_tags, pull_tags, reset_tags
 from dj_server.helpers.query import (
@@ -32,7 +32,6 @@ db_dir: str = os.path.abspath("../databases")
 download_dir: str = os.path.abspath("../downloads")
 
 # mutable globals
-mea_dir: str = None
 db: dj.VirtualModule = None
 username: str = "guest"
 query: dj.expression.QueryExpression = None
@@ -58,15 +57,6 @@ def set_db_dir():
     db_dir = request.json.get('dir')
     if db_dir and os.path.isdir(db_dir):
         return jsonify({"message": "Database directory set successfully!"}), 200
-    else:
-        return jsonify({"message": "Invalid directory path!"}), 400
-
-@app.route('/init/set-mea-directory', methods=['POST'])
-def set_mea_dir():
-    global mea_dir
-    mea_dir = request.json.get('dir')
-    if mea_dir and os.path.isdir(mea_dir):
-        return jsonify({"message": "MEA data directory set successfully!"}), 200
     else:
         return jsonify({"message": "Invalid directory path!"}), 400
 
@@ -260,12 +250,11 @@ def clear():
 
 @app.route('/browse/experiments', methods=['GET'])
 def browse_experiments():
-    """Return lightweight experiment list filtered by mode (patch/mea/all)."""
+    """Return lightweight experiment list (patch / single-cell only)."""
     if not db:
         return jsonify({"message": "No database connection!"}), 400
-    mode = request.args.get('mode', 'all')
     fill_tables(username, db)
-    experiments = get_experiment_list(mode, db)
+    experiments = get_experiment_list(db)
     return jsonify({"experiments": experiments}), 200
 
 @app.route('/browse/tree/<int:experiment_id>', methods=['GET'])
@@ -423,8 +412,6 @@ def get_visualization():
             data = request.json.get('data')
             if data['vis_type'] == 'epoch-singlecell':
                 image = get_trace_binary(data['h5_file'], data['h5_path'])
-            elif data['vis_type'] == 'epoch_block-mea':
-                image = get_spikehist_binary(data['data_path'])
             else:
                 return jsonify({"message": "Visualization type not supported!"}), 400
             if image is None:
