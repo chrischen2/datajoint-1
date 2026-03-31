@@ -128,20 +128,18 @@ def apply_conditions(conds: dict, table_name: str) -> list:
 def process_query(query_obj: dict) -> dj.expression.QueryExpression:
     query = Experiment
     for table in table_arr[:-2]:
-        # apply conditions
+        # apply conditions (table is already in query from the previous merge-down)
         if table in query_obj.keys():
             if table in ['epoch_group', 'epoch_block']:
-                # add protocol if necessary, rename primary key afterwards
-                query = query * table_dict[table] * Protocol.proj(protocol_name = 'name')
+                # add protocol, rename primary key afterwards
+                query = query * Protocol.proj(protocol_name='name')
                 if query_obj[table]:
                     query = query & apply_conditions(query_obj[table], table)
-                query = query.proj(**{f'{table}_protocol_id':'protocol_id'})
+                query = query.proj(**{f'{table}_protocol_id': 'protocol_id'})
             else:
-                if table != 'experiment':
-                    query = query * table_dict[table]
                 if query_obj[table]:
                     query = query & apply_conditions(query_obj[table], table)
-        # merge down
+        # merge down: rename current id, join with child table
         query = query.proj(**{f'{table}_id':'id'}) * table_dict[utils.child_table(table)].proj(**{f'{table}_id':'parent_id'})
     return query.proj(response_id='id')
 
@@ -366,7 +364,7 @@ def delete_tags(ids: list, tag: str):
     for id in ids:
         experiment_id, table_name, table_id = id.split('-')
         (Tags & f"experiment_id='{experiment_id}'" & f"table_name='{table_name}'" & f"table_id={table_id}" 
-         & f"tag='{tag}'").delete(safemode=False)
+         & f"tag='{tag}'").delete(prompt=False)
     print("Tags table:")
     print(Tags.fetch(), flush=True)
 
@@ -444,7 +442,7 @@ def traverse_and_append_tags(experiment_id: int, parent_id: int, cur_level: int,
 # refresh tags from tags_file made by other users, delete old tags from other users
 def pull_tags(experiment_ids: list):
     for experiment_id in experiment_ids:
-        (Tags & f"experiment_id='{experiment_id}'" & f"user!='{user}'").delete(safemode=False)
+        (Tags & f"experiment_id='{experiment_id}'" & f"user!='{user}'").delete(prompt=False)
         tags_file = (Experiment & f"id={experiment_id}").fetch1('tags_file')
         with open(tags_file, 'r') as f:
             tags = json.load(f)
@@ -455,7 +453,7 @@ def pull_tags(experiment_ids: list):
 # refresh tags from tags_file made by all users, delete old tags from all users
 def reset_tags(experiment_ids: list):
     for experiment_id in experiment_ids:
-        (Tags & f"experiment_id='{experiment_id}'").delete(safemode=False)
+        (Tags & f"experiment_id='{experiment_id}'").delete(prompt=False)
         tags_file = (Experiment & f"id={experiment_id}").fetch1('tags_file')
         with open(tags_file, 'r') as f:
             tags = json.load(f)

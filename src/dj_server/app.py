@@ -279,11 +279,9 @@ def is_adding():
 def clear():
     if db and username:
         try:
-            dj.config["safemode"] = False
-            db.Experiment.delete()
-            db.Protocol.delete()
-            db.Tags.delete()
-            dj.config["safemode"] = True
+            db.Experiment.delete(prompt=False)
+            db.Protocol.delete(prompt=False)
+            db.Tags.delete(prompt=False)
             return jsonify({"message": f"Database successfully cleared!"}), 200
         except:
             return jsonify({"message": "Error while clearing."}), 400
