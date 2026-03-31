@@ -248,19 +248,31 @@ def apply_conditions(conds: dict, table_name: str) -> list:
     return cur_cond
 
 def process_query(query_obj: dict) -> dj.expression.QueryExpression:
+    """Build a flat join across the hierarchy, producing experiment_id … response_id columns.
+
+    DJ 2.x requires explicit attribute lists in .proj() to preserve renamed
+    primary-key columns through the chain.  We track them ourselves.
+    """
     query = Experiment
+    # Accumulate the renamed *_id attributes so we can carry them forward
+    renamed_ids = []
+
     for table in table_arr[:-2]:
         if table in query_obj.keys():
             if table in ['epoch_group', 'epoch_block']:
                 query = query * Protocol.proj(protocol_name='name')
                 if query_obj[table]:
                     query = query & apply_conditions(query_obj[table], table)
-                query = query.proj(**{f'{table}_protocol_id': 'protocol_id'})
+                query = query.proj(*renamed_ids, **{f'{table}_protocol_id': 'protocol_id'})
             else:
                 if query_obj[table]:
                     query = query & apply_conditions(query_obj[table], table)
-        query = query.proj(**{f'{table}_id':'id'}) * table_dict[child_table(table)].proj(**{f'{table}_id':'parent_id'})
-    return query.proj(response_id='id')
+        # Rename current table's id and join with the child table
+        query = (query.proj(*renamed_ids, **{f'{table}_id': 'id'})
+                 * table_dict[child_table(table)].proj(**{f'{table}_id': 'parent_id'}))
+        renamed_ids.append(f'{table}_id')
+
+    return query.proj(*renamed_ids, response_id='id')
 
 def create_query(query_obj: dict, username: str, db_param: dj.VirtualModule) -> dj.expression.QueryExpression:
     global query
