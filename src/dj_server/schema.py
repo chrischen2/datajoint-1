@@ -7,7 +7,7 @@ dj.config['database.password'] = 'simple'
 
 dj.conn().connect()
 
-schema = dj.schema('schema')
+schema = dj.Schema('schema')
 
 @schema
 class Protocol(dj.Manual):
