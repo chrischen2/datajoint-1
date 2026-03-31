@@ -63,7 +63,6 @@ export default function ResultsTree(props){
             let object = {};
             if (result.level === "experiment") {
                 object['id'] = result.id + "-" + result.level + "-"  + result.id;
-                object['is_mea'] = result.is_mea;
             } else {
                 object['id'] = result.experiment_id + "-" + result.level + "-"  + result.id;
             }

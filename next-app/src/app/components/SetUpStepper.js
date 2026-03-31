@@ -9,180 +9,153 @@ import Step from '@mui/material/Step';
 import StepLabel from '@mui/material/StepLabel';
 import StepContent from '@mui/material/StepContent';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 
 import SelectDatabase from './setup/SelectDatabase';
 import SetUser from './setup/SetUser';
-import AddData from './setup/AddData';
 import QueryContainer from './setup/QueryContainer';
+import ExperimentBrowser from './browse/ExperimentBrowser';
 
 const steps = [
-  {
-    label: 'Select database',
-    description: `Current list of databases: start and connect to continue.`,
-  },
-  {
-    label: 'Set user',
-    description:
-      'Set a user to continue. If a user is already set, you can skip this step.',
-  },
-  {
-    label: 'Add data (optional)',
-    description: ``,
-  },
-  {
-    label: 'Query data',
-    description: `...`,
-  },
+  { label: 'Connect to database', description: 'Select a running database and connect.' },
+  { label: 'Set user', description: 'Set your username.' },
+  { label: 'Browse & Query', description: '' },
 ];
 
-export default function SetUpStepper(props){
+export default function SetUpStepper({ onResultsChange }) {
   const [activeStep, setActiveStep] = React.useState(0);
   const [isConnected, setIsConnected] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false);
   const [user, setUser] = React.useState(false);
-  const [cont, setCont] = React.useState(false);
   const [queryObj, setQueryObj] = React.useState(null);
   const [excludeLevels, setExcludeLevels] = React.useState([]);
   const [response, setResponse] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [open, setOpen] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [browseTab, setBrowseTab] = React.useState(0);
 
-  const handleNext = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep === 3 ? prevActiveStep : prevActiveStep + 1);
-  };
-
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-  };
-
-  const handleReset = () => {
-    setActiveStep(0);
-  };
-
-  const handleConnection = (status) => {
-    setIsConnected(status);
-  }
-
-  const handleUser = (status) => {
-    setUser(status);
-  }
-
-  const handleCont = (status) => {
-    setCont(status);
-  }
-
-  const handleExcludeChange = (levels) => {
-    setExcludeLevels(levels);
-  }
-
-  const handleQueryObj = (obj) => {
-    console.log(obj);
-    if (obj == {}) {
-      setQueryObj(null);
-    } else {
-      setQueryObj(obj);
-    }
-  }
+  const handleNext = () => setActiveStep(prev => Math.min(prev + 1, steps.length - 1));
+  const handleBack = () => setActiveStep(prev => prev - 1);
 
   const handleExec = () => {
     setIsLoading(true);
-    axios.post('http://localhost:3000/api/query/execute-query', { 
+    axios.post('http://localhost:3000/api/query/execute-query', {
       query_obj: queryObj,
       exclude_levels: excludeLevels
-     })
-        .then(response => {
-          setIsLoading(false);
-          if (response.data.results) {
-            props.onResultsChange(response.data.results);
-          } else {
-            setResponse(response.data.message);
-            setError(null);
-            setOpen(true);
-          }
-        })
-        .catch(error => {
-            setIsLoading(false);
-            setError(error.response.data.message);
-            setResponse(null);
-            setOpen(true);
-        });
-  }
-
-  const handleClose = (event, reason) => {
-    if (reason === 'clickaway') {
-        return;
-    }
-    setOpen(false);
-  }
+    })
+      .then(res => {
+        setIsLoading(false);
+        if (res.data.results) {
+          onResultsChange(res.data.results);
+        } else {
+          setResponse(res.data.message);
+          setError(null);
+          setOpen(true);
+        }
+      })
+      .catch(err => {
+        setIsLoading(false);
+        setError(err.response?.data?.message || 'Query failed');
+        setResponse(null);
+        setOpen(true);
+      });
+  };
 
   return (
-    <Box sx={{ maxWidth: "none" }}>
+    <Box sx={{ maxWidth: "none", height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Stepper activeStep={activeStep} orientation="vertical" sx={{
-        '& .MuiStepConnector-line': {minHeight: "2px"},
+        '& .MuiStepConnector-line': { minHeight: "2px" },
+        flexShrink: 0,
       }}>
         {steps.map((step, index) => (
           <Step key={step.label}>
-            <StepLabel optional={index === 3 ? (<Typography variant="caption">Last step</Typography>) : null}>
+            <StepLabel>
               {step.label}
             </StepLabel>
             <StepContent>
-              {step.description}
-              {index === 0 && <SelectDatabase onConnectionStatusChange={handleConnection} />}
-              {index === 1 && <SetUser onUserSet={handleUser} />}
-              {index === 2 && <AddData onContinue={handleCont} />}
-              {index === 3 && <QueryContainer 
-                                onQueryObj={handleQueryObj} 
-                                onExcludeChange={handleExcludeChange}/>}
-              {isLoading ? 
-              <CircularProgress />
-              :
-              <Box sx={{ mb: 2 }}>
-                <div>
+              {step.description && <Typography variant="body2" color="text.secondary">{step.description}</Typography>}
+
+              {/* Step 0: Connect */}
+              {index === 0 && <SelectDatabase onConnectionStatusChange={setIsConnected} />}
+
+              {/* Step 1: Mode + User */}
+              {index === 1 && (
+                <SetUser onUserSet={setUser} />
+              )}
+
+              {/* Step 2: Browse & Query */}
+              {index === 2 && (
+                <Box sx={{ mt: 1 }}>
+                  <Tabs value={browseTab} onChange={(_, v) => setBrowseTab(v)} size="small">
+                    <Tab label="Browse Experiments" />
+                    <Tab label="Advanced Query" />
+                  </Tabs>
+                  {browseTab === 0 && (
+                    <Box sx={{ height: 'calc(100vh - 350px)', mt: 1 }}>
+                      <ExperimentBrowser />
+                    </Box>
+                  )}
+                  {browseTab === 1 && (
+                    <Box sx={{ mt: 1 }}>
+                      <QueryContainer
+                        onQueryObj={setQueryObj}
+                        onExcludeChange={setExcludeLevels}
+                      />
+                      {isLoading ? (
+                        <CircularProgress sx={{ mt: 1 }} />
+                      ) : (
+                        <Button
+                          disabled={!queryObj}
+                          variant="contained"
+                          onClick={handleExec}
+                          sx={{ mt: 1 }}
+                        >
+                          View Results
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+                </Box>
+              )}
+
+              {/* Navigation (steps 0-1 only) */}
+              {index < 2 && (
+                <Box sx={{ mb: 2 }}>
                   <Button
-                    disabled={(activeStep === 0 && !isConnected) || (activeStep === 1 && !user) 
-                      || (activeStep === 2 && !cont) || (activeStep === 3 && !queryObj)}
+                    disabled={(index === 0 && !isConnected) || (index === 1 && !user)}
                     variant="contained"
-                    onClick={index === steps.length - 1 ? handleExec : handleNext}
+                    onClick={handleNext}
                     sx={{ mt: 1, mr: 1 }}
                   >
-                    {index === steps.length - 1 ? 'View Results' : 'Next'}
+                    Next
                   </Button>
-                  <Button
-                    disabled={index === 0}
-                    onClick={handleBack}
-                    sx={{ mt: 1, mr: 1 }}
-                  >
-                    Back
-                  </Button>
-                </div>
-              </Box>}
+                  {index > 0 && (
+                    <Button onClick={handleBack} sx={{ mt: 1, mr: 1 }}>
+                      Back
+                    </Button>
+                  )}
+                </Box>
+              )}
             </StepContent>
           </Step>
         ))}
       </Stepper>
-      {activeStep === steps.length && (
-        <Paper square elevation={0} sx={{ p: 3 }}>
-          <Typography></Typography>
-          <Button onClick={handleReset} sx={{ mt: 1, mr: 1 }}>
-            Reset
-          </Button>
-        </Paper>
-      )}
-      <Snackbar open={open} autoHideDuration={6000} onClose={handleClose}>
-            <Alert
-            onClose={handleClose}
-            severity={error != null ? "error" : "success"}
-            variant="filled"
-            sx={{ width: '100%' }}
-            >
-            {error != null ? error : response}
-            </Alert>
-        </Snackbar>
+
+      <Snackbar open={open} autoHideDuration={6000} onClose={() => setOpen(false)}>
+        <Alert
+          onClose={() => setOpen(false)}
+          severity={error ? "error" : "success"}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {error || response}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

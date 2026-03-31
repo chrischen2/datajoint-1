@@ -5,20 +5,20 @@ build-backend = "hatchling.build"
 [project]
 name = "dj-server"
 version = "0.1.0"
-description = "DataJoint Flask server for neuroscience experiment management"
+description = "DataJoint web GUI for retinanalysis — Flask API + Next.js frontend"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
   { name = "Samarjit Kaushik", email = "samarjit@uw.edu" },
 ]
 dependencies = [
-  "datajoint>=2.0",
   "flask>=3.0.3",
   "flask-cors>=4.0.1",
   "h5py>=3.11.0",
   "matplotlib>=3.9.2",
   "numpy",
   "pymysql",
+  "retinanalysis",
   "tqdm>=4.66.4",
 ]
 
