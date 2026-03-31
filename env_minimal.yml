@@ -1,0 +1,6 @@
+name: retinanalysis
+channels:
+  - defaults
+dependencies:
+  - python=3.11.13
+prefix: /Users/chrischen/opt/anaconda3/envs/retinanalysis
