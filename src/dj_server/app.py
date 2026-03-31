@@ -4,6 +4,7 @@ from flask import Flask, session, request, jsonify
 from flask_cors import CORS
 import datajoint as dj
 import pymysql
+import subprocess
 import time
 import json
 import importlib.resources
@@ -80,12 +81,21 @@ def get_db_dir():
 # None -> databases: list
 @app.route('/init/list-databases', methods=['GET'])
 def list_dbs():
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
+    dbs = []
+    # Check for databases managed in db_dir
+    if db_dir and os.path.isdir(db_dir):
         dbs = [f for f in os.listdir(db_dir) if os.path.isdir(os.path.join(db_dir, f))]
-        return jsonify({"databases": dbs}), 200
-    else:
-        return jsonify({"message": "Database directory not set!"}), 400
+    # Also detect running datajoint/mysql Docker containers
+    try:
+        result = subprocess.run(
+            ['docker', 'ps', '--filter', 'ancestor=datajoint/mysql', '--format', '{{.Names}}'],
+            capture_output=True, text=True, timeout=5)
+        for name in result.stdout.strip().splitlines():
+            if name and name not in dbs:
+                dbs.append(name)
+    except Exception:
+        pass  # Docker not available or not running
+    return jsonify({"databases": dbs}), 200
 
 # name: str -> None
 @app.route('/init/create-database', methods=['POST'])
